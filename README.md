@@ -106,6 +106,61 @@ If you want to use fairyground to test your experimental Fairy-Stockfish build, 
 
 9. The page displayed now is using your version of Fairy-Stockfish, and you can begin your test.
 
+### ◎ Build with custom Fairy-Stockfish (Automated via GitHub Actions)
+
+**NEW:** An automated GitHub Actions workflow is now available to build fairyground with your custom Fairy-Stockfish without needing to install Node.js, npm, or Emscripten locally!
+
+This workflow creates a standalone HTML package that can run directly in your browser without any server or installation.
+
+#### How to use the automated workflow:
+
+1. **Navigate to Actions**: Go to the [Actions tab](../../actions/workflows/custom-build.yml) in this repository
+
+2. **Run the workflow**:
+   - Click on "Custom Fairy-Stockfish Build" workflow
+   - Click "Run workflow" button
+   - Configure the inputs:
+     - **Fairy-Stockfish repository**: Enter your repository in format `owner/repo` (e.g., `mtaktikos/Fairy-Stockfish`)
+     - **Fairy-Stockfish branch**: Enter the branch name (e.g., `bd`)
+   - Click "Run workflow"
+
+3. **Wait for the build**: The workflow will automatically:
+   - Clone your custom Fairy-Stockfish repository
+   - Build ffish.js and the WASM engine
+   - Build fairyground with your custom engine
+   - Package everything as a standalone archive
+
+4. **Download the result**:
+   - Once the workflow completes (usually 10-15 minutes), click on the workflow run
+   - Download either the ZIP or TAR.GZ artifact (they contain the same files)
+
+5. **Use the standalone package**:
+   - Extract the downloaded archive
+   - Open `advanced.html` in your web browser
+   - No server needed - it works completely offline!
+
+#### Browser compatibility notes:
+- **Firefox**: Usually works best for opening local HTML files
+- **Chrome/Edge**: May require a simple HTTP server due to security restrictions
+- **Safari**: Should work for local files
+
+If you encounter issues opening the HTML file directly:
+```bash
+# Use Python's built-in server
+python -m http.server 8000
+
+# Or Node.js
+npx serve .
+
+# Then open http://localhost:8000/advanced.html
+```
+
+This automated method is perfect for:
+- ✅ Testing experimental Fairy-Stockfish builds
+- ✅ Creating portable analysis tools
+- ✅ Sharing custom builds without requiring technical setup
+- ✅ Avoiding complex build toolchain installation
+
 ## Supported Browsers
 
 ### Full Support
