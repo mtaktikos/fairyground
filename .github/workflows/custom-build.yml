@@ -140,7 +140,6 @@ jobs:
           # Get commit info
           cd /tmp/Fairy-Stockfish
           FS_COMMIT=$(git rev-parse HEAD)
-          FS_COMMIT_SHORT=$(git rev-parse --short HEAD)
           
           # Create a README for users
           cat > /tmp/fairyground-standalone/README.txt << 'EOFREADME'
