@@ -143,57 +143,57 @@ jobs:
           FS_COMMIT_SHORT=$(git rev-parse --short HEAD)
           
           # Create a README for users
-          cat > /tmp/fairyground-standalone/README.txt << EOF
-Fairyground with Custom Fairy-Stockfish
-========================================
-
-This is a standalone version of Fairyground built with custom Fairy-Stockfish.
-
-HOW TO USE
-----------
-1. Extract this archive to a folder on your computer
-2. Open "advanced.html" in your web browser:
-   - Double-click the file, OR
-   - Right-click and choose "Open with" and select your browser
-3. The application will load and work entirely offline!
-
-BROWSER COMPATIBILITY
----------------------
-The application works best with:
-- Mozilla Firefox (recommended for local files)
-- Google Chrome / Microsoft Edge
-- Apple Safari
-
-Note: Some browsers have security restrictions for local files.
-If you see a blank page or errors:
-
-Option 1: Try Firefox (usually works without issues)
-
-Option 2: Start a simple local server:
-  - If you have Python 3: python -m http.server 8000
-  - If you have Python 2: python -m SimpleHTTPServer 8000
-  - If you have Node.js: npx serve .
-  Then open http://localhost:8000/advanced.html
-
-WHAT'S INCLUDED
----------------
-- Complete offline chess variant analysis engine
-- All variant definitions and piece sets
-- Board themes and customization options
-- No internet connection required after download
-- No installation or setup needed
-
-BUILD INFORMATION
------------------
-Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
-Fairyground: ${{ github.repository }} @ ${{ github.sha }}
-Custom Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
-Fairy-Stockfish commit: ${FS_COMMIT}
-
-For more information visit:
-- Fairyground: https://github.com/${{ github.repository }}
-- Fairy-Stockfish: https://github.com/${{ github.event.inputs.fairy_stockfish_repo }}
-EOF
+          cat > /tmp/fairyground-standalone/README.txt << 'EOFREADME'
+          Fairyground with Custom Fairy-Stockfish
+          ========================================
+          
+          This is a standalone version of Fairyground built with custom Fairy-Stockfish.
+          
+          HOW TO USE
+          ----------
+          1. Extract this archive to a folder on your computer
+          2. Open "advanced.html" in your web browser:
+             - Double-click the file, OR
+             - Right-click and choose "Open with" and select your browser
+          3. The application will load and work entirely offline!
+          
+          BROWSER COMPATIBILITY
+          ---------------------
+          The application works best with:
+          - Mozilla Firefox (recommended for local files)
+          - Google Chrome / Microsoft Edge
+          - Apple Safari
+          
+          Note: Some browsers have security restrictions for local files.
+          If you see a blank page or errors:
+          
+          Option 1: Try Firefox (usually works without issues)
+          
+          Option 2: Start a simple local server:
+            - If you have Python 3: python -m http.server 8000
+            - If you have Python 2: python -m SimpleHTTPServer 8000
+            - If you have Node.js: npx serve .
+            Then open http://localhost:8000/advanced.html
+          
+          WHAT'S INCLUDED
+          ---------------
+          - Complete offline chess variant analysis engine
+          - All variant definitions and piece sets
+          - Board themes and customization options
+          - No internet connection required after download
+          - No installation or setup needed
+          
+          BUILD INFORMATION
+          -----------------
+          Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          Fairyground: ${{ github.repository }} @ ${{ github.sha }}
+          Custom Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
+          Fairy-Stockfish commit: ${FS_COMMIT}
+          
+          For more information visit:
+          - Fairyground: https://github.com/${{ github.repository }}
+          - Fairy-Stockfish: https://github.com/${{ github.event.inputs.fairy_stockfish_repo }}
+          EOFREADME
           
           # Create the archives
           echo "Creating compressed archives"
