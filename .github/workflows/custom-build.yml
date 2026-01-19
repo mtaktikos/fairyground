@@ -11,14 +11,6 @@ on:
         description: 'Fairy-Stockfish branch'
         required: true
         default: 'bd'
-      fairy_stockfish_wasm_repo:
-        description: 'Fairy-Stockfish WASM repository (owner/repo)'
-        required: true
-        default: 'fairy-stockfish/fairy-stockfish.wasm'
-      fairy_stockfish_wasm_branch:
-        description: 'Fairy-Stockfish WASM branch'
-        required: true
-        default: 'nnue'
 
 jobs:
   build-custom:
@@ -39,74 +31,101 @@ jobs:
       
       - name: Clone custom Fairy-Stockfish
         run: |
+          echo "Cloning ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}"
           cd /tmp
           git clone --depth 1 --branch ${{ github.event.inputs.fairy_stockfish_branch }} https://github.com/${{ github.event.inputs.fairy_stockfish_repo }}.git Fairy-Stockfish
-      
-      - name: Clone Fairy-Stockfish WASM
-        run: |
-          cd /tmp
-          git clone --depth 1 --branch ${{ github.event.inputs.fairy_stockfish_wasm_branch }} https://github.com/${{ github.event.inputs.fairy_stockfish_wasm_repo }}.git fairy-stockfish.wasm
+          cd Fairy-Stockfish
+          echo "Repository cloned successfully"
+          echo "Commit: $(git rev-parse HEAD)"
+          echo "Branch: $(git branch --show-current)"
       
       - name: Build ffish.js (ES6)
         run: |
+          echo "Building ffish.js with ES6 module support"
           cd /tmp/Fairy-Stockfish/src
-          make -f Makefile_js build es6=yes
+          make -f Makefile_js build es6=yes largeboards=yes
           echo "ffish.js build completed"
-          ls -la ../tests/js/
+          ls -lah ../tests/js/ | grep -E "ffish\.(js|wasm)"
       
-      - name: Copy Fairy-Stockfish source to WASM build directory
+      - name: Check if WASM build infrastructure exists in custom repo
+        id: check_wasm
         run: |
-          # The WASM repo expects Fairy-Stockfish source at the parent level
-          # Copy source files from custom Fairy-Stockfish to the WASM repo
-          cd /tmp/fairy-stockfish.wasm
-          # Remove old Fairy-Stockfish source except emscripten
-          rm -rf src/*.cpp src/*.h 2>/dev/null || true
-          # Keep the emscripten directory intact
-          mv src/emscripten /tmp/emscripten-backup
-          rm -rf src/*
-          mkdir -p src
-          mv /tmp/emscripten-backup src/emscripten
-          # Copy all source from custom Fairy-Stockfish
-          cp -r /tmp/Fairy-Stockfish/src/* /tmp/fairy-stockfish.wasm/src/ || true
-          # Restore emscripten (overwrite if needed)
-          cp -r /tmp/emscripten-backup/* /tmp/fairy-stockfish.wasm/src/emscripten/
-          echo "Source files copied"
+          if [ -d "/tmp/Fairy-Stockfish/src/emscripten" ]; then
+            echo "has_wasm=true" >> $GITHUB_OUTPUT
+            echo "Custom repo has WASM build infrastructure"
+          else
+            echo "has_wasm=false" >> $GITHUB_OUTPUT
+            echo "Custom repo does not have WASM build infrastructure, will use base repo"
+          fi
+      
+      - name: Clone base Fairy-Stockfish WASM (if needed)
+        if: steps.check_wasm.outputs.has_wasm == 'false'
+        run: |
+          echo "Cloning base fairy-stockfish.wasm repository"
+          cd /tmp
+          git clone --depth 1 --branch nnue https://github.com/fairy-stockfish/fairy-stockfish.wasm.git fairy-stockfish.wasm
+      
+      - name: Prepare WASM build directory
+        run: |
+          if [ "${{ steps.check_wasm.outputs.has_wasm }}" == "true" ]; then
+            echo "Using WASM build from custom repository"
+            WASM_DIR="/tmp/Fairy-Stockfish"
+          else
+            echo "Merging custom source with base WASM repo"
+            WASM_DIR="/tmp/fairy-stockfish.wasm"
+            # Backup emscripten directory
+            cp -r /tmp/fairy-stockfish.wasm/src/emscripten /tmp/emscripten-backup
+            # Copy custom Fairy-Stockfish source
+            cp -r /tmp/Fairy-Stockfish/src/* /tmp/fairy-stockfish.wasm/src/
+            # Restore emscripten directory
+            rm -rf /tmp/fairy-stockfish.wasm/src/emscripten
+            mv /tmp/emscripten-backup /tmp/fairy-stockfish.wasm/src/emscripten
+          fi
+          echo "WASM_DIR=$WASM_DIR" >> $GITHUB_ENV
       
       - name: Build Fairy-Stockfish WASM
         run: |
-          cd /tmp/fairy-stockfish.wasm/src/emscripten
-          npm install
-          cd /tmp/fairy-stockfish.wasm
-          make -C src emscripten_build ARCH=wasm
+          echo "Building Fairy-Stockfish WASM"
+          cd $WASM_DIR/src
+          make emscripten_build ARCH=wasm
           echo "WASM build completed"
-          ls -la /tmp/fairy-stockfish.wasm/src/emscripten/public/
+          ls -lah $WASM_DIR/src/emscripten/public/ | grep -E "stockfish\.(js|wasm|worker\.js)"
       
       - name: Install fairyground dependencies
         run: |
           cd $GITHUB_WORKSPACE
+          echo "Installing fairyground dependencies"
           npm install
       
       - name: Replace with custom builds
         run: |
           cd $GITHUB_WORKSPACE
-          # Replace ffish-es6
+          echo "Replacing ffish-es6 with custom build"
           rm -rf node_modules/ffish-es6/*
           cp -r /tmp/Fairy-Stockfish/tests/js/* node_modules/ffish-es6/
           
-          # Replace fairy-stockfish-nnue.wasm
+          echo "Replacing fairy-stockfish-nnue.wasm with custom build"
           rm -rf node_modules/fairy-stockfish-nnue.wasm/*
-          cp -r /tmp/fairy-stockfish.wasm/src/emscripten/public/* node_modules/fairy-stockfish-nnue.wasm/
+          cp -r $WASM_DIR/src/emscripten/public/* node_modules/fairy-stockfish-nnue.wasm/
           
-          echo "Custom builds installed"
+          echo "Custom builds installed successfully"
+          echo "ffish-es6 contents:"
+          ls -lah node_modules/ffish-es6/ | head -10
+          echo "fairy-stockfish-nnue.wasm contents:"
+          ls -lah node_modules/fairy-stockfish-nnue.wasm/ | head -10
       
       - name: Build fairyground
         run: |
           cd $GITHUB_WORKSPACE
+          echo "Building fairyground with custom Fairy-Stockfish"
           npm run build
+          echo "Build completed successfully"
       
       - name: Create standalone package
         run: |
           cd $GITHUB_WORKSPACE
+          echo "Creating standalone package"
+          
           # Create a standalone directory
           mkdir -p /tmp/fairyground-standalone
           
@@ -118,41 +137,73 @@ jobs:
           rm -f /tmp/fairyground-standalone/serve.json
           rm -f /tmp/fairyground-standalone/_headers
           
+          # Get commit info
+          cd /tmp/Fairy-Stockfish
+          FS_COMMIT=$(git rev-parse HEAD)
+          FS_COMMIT_SHORT=$(git rev-parse --short HEAD)
+          
           # Create a README for users
-          cat > /tmp/fairyground-standalone/README.txt << 'EOF'
+          cat > /tmp/fairyground-standalone/README.txt << EOF
 Fairyground with Custom Fairy-Stockfish
 ========================================
 
 This is a standalone version of Fairyground built with custom Fairy-Stockfish.
 
-How to use:
+HOW TO USE
+----------
 1. Extract this archive to a folder on your computer
-2. Open the "advanced.html" file in your web browser
-   - You can double-click it, or right-click and choose "Open with" your browser
-3. The application should load and work entirely offline
+2. Open "advanced.html" in your web browser:
+   - Double-click the file, OR
+   - Right-click and choose "Open with" and select your browser
+3. The application will load and work entirely offline!
 
-Note: Some browsers (like Chrome) may have restrictions when opening local files.
-If you encounter issues:
-- Try using Firefox, which typically has fewer restrictions for local files
-- Or, serve the files with a simple HTTP server:
-  - Python 3: python -m http.server 8000
-  - Python 2: python -m SimpleHTTPServer 8000
-  - Then open http://localhost:8000/advanced.html in your browser
+BROWSER COMPATIBILITY
+---------------------
+The application works best with:
+- Mozilla Firefox (recommended for local files)
+- Google Chrome / Microsoft Edge
+- Apple Safari
 
-Variant files and all assets are included for offline use.
+Note: Some browsers have security restrictions for local files.
+If you see a blank page or errors:
 
-Built from:
-- Fairyground: ${{ github.repository }} @ ${{ github.sha }}
-- Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
-- Fairy-Stockfish WASM: ${{ github.event.inputs.fairy_stockfish_wasm_repo }} @ ${{ github.event.inputs.fairy_stockfish_wasm_branch }}
+Option 1: Try Firefox (usually works without issues)
+
+Option 2: Start a simple local server:
+  - If you have Python 3: python -m http.server 8000
+  - If you have Python 2: python -m SimpleHTTPServer 8000
+  - If you have Node.js: npx serve .
+  Then open http://localhost:8000/advanced.html
+
+WHAT'S INCLUDED
+---------------
+- Complete offline chess variant analysis engine
+- All variant definitions and piece sets
+- Board themes and customization options
+- No internet connection required after download
+- No installation or setup needed
+
+BUILD INFORMATION
+-----------------
+Built on: $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+Fairyground: ${{ github.repository }} @ ${{ github.sha }}
+Custom Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
+Fairy-Stockfish commit: ${FS_COMMIT}
+
+For more information visit:
+- Fairyground: https://github.com/${{ github.repository }}
+- Fairy-Stockfish: https://github.com/${{ github.event.inputs.fairy_stockfish_repo }}
 EOF
           
-          # Create the archive
+          # Create the archives
+          echo "Creating compressed archives"
           cd /tmp
           tar czf fairyground-custom-standalone.tar.gz fairyground-standalone/
-          zip -r fairyground-custom-standalone.zip fairyground-standalone/
+          zip -q -r fairyground-custom-standalone.zip fairyground-standalone/
           
-          echo "Standalone package created"
+          # Show file sizes
+          echo "Package created successfully:"
+          ls -lh /tmp/fairyground-custom-standalone.*
       
       - name: Upload standalone build (TAR.GZ)
         uses: actions/upload-artifact@v6
@@ -172,15 +223,25 @@ EOF
       
       - uses: mholetzko/annotate_runs@1.0.1
         with:
-          title: "Fairyground Custom Build Download Notice"
+          title: "📦 Fairyground Custom Build - Download Instructions"
           info: |
-            This workflow builds Fairyground with custom Fairy-Stockfish from the specified repository and branch.
+            ✅ Build completed successfully!
             
-            Download either the ZIP or TAR.GZ archive (they contain the same files).
-            Extract the archive and open "advanced.html" in your web browser.
+            **What you get:**
+            A completely standalone version of Fairyground with your custom Fairy-Stockfish build.
+            No Node.js, npm, or server installation required - just extract and open in your browser!
             
-            The build is completely standalone and can run offline without any server or Node.js installation.
+            **Download:**
+            Choose either ZIP or TAR.GZ format (they contain identical files):
+            - Fairyground-Custom-Standalone-ZIP (recommended for Windows)
+            - Fairyground-Custom-Standalone-TGZ (recommended for Linux/macOS)
             
-            Configuration:
+            **Quick Start:**
+            1. Download and extract the archive
+            2. Open "advanced.html" in your web browser
+            3. Start analyzing chess variants!
+            
+            **Configuration:**
             - Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
-            - Fairy-Stockfish WASM: ${{ github.event.inputs.fairy_stockfish_wasm_repo }} @ ${{ github.event.inputs.fairy_stockfish_wasm_branch }}
+            - Build date: ${{ github.event.repository.updated_at }}
+
