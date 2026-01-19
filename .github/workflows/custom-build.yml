@@ -1,0 +1,186 @@
+name: Custom Fairy-Stockfish Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      fairy_stockfish_repo:
+        description: 'Fairy-Stockfish repository (owner/repo)'
+        required: true
+        default: 'mtaktikos/Fairy-Stockfish'
+      fairy_stockfish_branch:
+        description: 'Fairy-Stockfish branch'
+        required: true
+        default: 'bd'
+      fairy_stockfish_wasm_repo:
+        description: 'Fairy-Stockfish WASM repository (owner/repo)'
+        required: true
+        default: 'fairy-stockfish/fairy-stockfish.wasm'
+      fairy_stockfish_wasm_branch:
+        description: 'Fairy-Stockfish WASM branch'
+        required: true
+        default: 'nnue'
+
+jobs:
+  build-custom:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fairyground
+        uses: actions/checkout@v6
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: '3.1.51'
+      
+      - name: Clone custom Fairy-Stockfish
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch ${{ github.event.inputs.fairy_stockfish_branch }} https://github.com/${{ github.event.inputs.fairy_stockfish_repo }}.git Fairy-Stockfish
+      
+      - name: Clone Fairy-Stockfish WASM
+        run: |
+          cd /tmp
+          git clone --depth 1 --branch ${{ github.event.inputs.fairy_stockfish_wasm_branch }} https://github.com/${{ github.event.inputs.fairy_stockfish_wasm_repo }}.git fairy-stockfish.wasm
+      
+      - name: Build ffish.js (ES6)
+        run: |
+          cd /tmp/Fairy-Stockfish/src
+          make -f Makefile_js build es6=yes
+          echo "ffish.js build completed"
+          ls -la ../tests/js/
+      
+      - name: Copy Fairy-Stockfish source to WASM build directory
+        run: |
+          # The WASM repo expects Fairy-Stockfish source at the parent level
+          # Copy source files from custom Fairy-Stockfish to the WASM repo
+          cd /tmp/fairy-stockfish.wasm
+          # Remove old Fairy-Stockfish source except emscripten
+          rm -rf src/*.cpp src/*.h 2>/dev/null || true
+          # Keep the emscripten directory intact
+          mv src/emscripten /tmp/emscripten-backup
+          rm -rf src/*
+          mkdir -p src
+          mv /tmp/emscripten-backup src/emscripten
+          # Copy all source from custom Fairy-Stockfish
+          cp -r /tmp/Fairy-Stockfish/src/* /tmp/fairy-stockfish.wasm/src/ || true
+          # Restore emscripten (overwrite if needed)
+          cp -r /tmp/emscripten-backup/* /tmp/fairy-stockfish.wasm/src/emscripten/
+          echo "Source files copied"
+      
+      - name: Build Fairy-Stockfish WASM
+        run: |
+          cd /tmp/fairy-stockfish.wasm/src/emscripten
+          npm install
+          cd /tmp/fairy-stockfish.wasm
+          make -C src emscripten_build ARCH=wasm
+          echo "WASM build completed"
+          ls -la /tmp/fairy-stockfish.wasm/src/emscripten/public/
+      
+      - name: Install fairyground dependencies
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm install
+      
+      - name: Replace with custom builds
+        run: |
+          cd $GITHUB_WORKSPACE
+          # Replace ffish-es6
+          rm -rf node_modules/ffish-es6/*
+          cp -r /tmp/Fairy-Stockfish/tests/js/* node_modules/ffish-es6/
+          
+          # Replace fairy-stockfish-nnue.wasm
+          rm -rf node_modules/fairy-stockfish-nnue.wasm/*
+          cp -r /tmp/fairy-stockfish.wasm/src/emscripten/public/* node_modules/fairy-stockfish-nnue.wasm/
+          
+          echo "Custom builds installed"
+      
+      - name: Build fairyground
+        run: |
+          cd $GITHUB_WORKSPACE
+          npm run build
+      
+      - name: Create standalone package
+        run: |
+          cd $GITHUB_WORKSPACE
+          # Create a standalone directory
+          mkdir -p /tmp/fairyground-standalone
+          
+          # Copy the public directory
+          cp -r public/* /tmp/fairyground-standalone/
+          
+          # Remove server-specific files
+          rm -f /tmp/fairyground-standalone/vercel.json
+          rm -f /tmp/fairyground-standalone/serve.json
+          rm -f /tmp/fairyground-standalone/_headers
+          
+          # Create a README for users
+          cat > /tmp/fairyground-standalone/README.txt << 'EOF'
+Fairyground with Custom Fairy-Stockfish
+========================================
+
+This is a standalone version of Fairyground built with custom Fairy-Stockfish.
+
+How to use:
+1. Extract this archive to a folder on your computer
+2. Open the "advanced.html" file in your web browser
+   - You can double-click it, or right-click and choose "Open with" your browser
+3. The application should load and work entirely offline
+
+Note: Some browsers (like Chrome) may have restrictions when opening local files.
+If you encounter issues:
+- Try using Firefox, which typically has fewer restrictions for local files
+- Or, serve the files with a simple HTTP server:
+  - Python 3: python -m http.server 8000
+  - Python 2: python -m SimpleHTTPServer 8000
+  - Then open http://localhost:8000/advanced.html in your browser
+
+Variant files and all assets are included for offline use.
+
+Built from:
+- Fairyground: ${{ github.repository }} @ ${{ github.sha }}
+- Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
+- Fairy-Stockfish WASM: ${{ github.event.inputs.fairy_stockfish_wasm_repo }} @ ${{ github.event.inputs.fairy_stockfish_wasm_branch }}
+EOF
+          
+          # Create the archive
+          cd /tmp
+          tar czf fairyground-custom-standalone.tar.gz fairyground-standalone/
+          zip -r fairyground-custom-standalone.zip fairyground-standalone/
+          
+          echo "Standalone package created"
+      
+      - name: Upload standalone build (TAR.GZ)
+        uses: actions/upload-artifact@v6
+        with:
+          name: Fairyground-Custom-Standalone-TGZ
+          path: /tmp/fairyground-custom-standalone.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+      
+      - name: Upload standalone build (ZIP)
+        uses: actions/upload-artifact@v6
+        with:
+          name: Fairyground-Custom-Standalone-ZIP
+          path: /tmp/fairyground-custom-standalone.zip
+          compression-level: 0
+          if-no-files-found: error
+      
+      - uses: mholetzko/annotate_runs@1.0.1
+        with:
+          title: "Fairyground Custom Build Download Notice"
+          info: |
+            This workflow builds Fairyground with custom Fairy-Stockfish from the specified repository and branch.
+            
+            Download either the ZIP or TAR.GZ archive (they contain the same files).
+            Extract the archive and open "advanced.html" in your web browser.
+            
+            The build is completely standalone and can run offline without any server or Node.js installation.
+            
+            Configuration:
+            - Fairy-Stockfish: ${{ github.event.inputs.fairy_stockfish_repo }} @ ${{ github.event.inputs.fairy_stockfish_branch }}
+            - Fairy-Stockfish WASM: ${{ github.event.inputs.fairy_stockfish_wasm_repo }} @ ${{ github.event.inputs.fairy_stockfish_wasm_branch }}
